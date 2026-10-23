@@ -1,0 +1,56 @@
+# Monatlich: Streckennetz, Grenzen und OSM-Gleisdaten für pfaedle neu erzeugen.
+# Ergebnis landet als Dateien im Release "netz" und wird vom täglichen Lauf verwendet.
+name: netz
+on:
+  schedule:
+    - cron: "0 1 3 * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  netz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update -q && sudo apt-get install -y -q osmium-tool
+      - run: pip install osmium shapely
+      - name: OSM-Ausschnitte laden und filtern
+        run: |
+          mkdir -p osm out
+          GF=https://download.geofabrik.de/europe
+          for c in germany france netherlands belgium luxembourg switzerland liechtenstein austria \
+                   czech-republic poland denmark slovakia hungary slovenia sweden lithuania \
+                   italy/nord-est italy/nord-ovest great-britain/england russia/kaliningrad; do
+            n=$(echo $c | tr / -)
+            [ $c = russia/kaliningrad ] && url=https://download.geofabrik.de/russia/kaliningrad-latest.osm.pbf || url=$GF/$c-latest.osm.pbf
+            echo "::group::$c"
+            curl -sSfL --retry 3 -o osm/raw.pbf "$url"
+            osmium extract -b -4.7,45.4,25.6,56.9 --set-bounds -s smart osm/raw.pbf -o osm/box.pbf --overwrite
+            osmium tags-filter osm/box.pbf nwr/railway nwr/public_transport r/route=train,railway nwr/train -o osm/pt-$n.pbf --overwrite
+            osmium tags-filter osm/pt-$n.pbf w/railway=rail r/route=train,railway -o osm/rail-$n.pbf --overwrite
+            rm osm/raw.pbf osm/box.pbf
+            ls -la osm/*-$n.pbf
+            echo "::endgroup::"
+          done
+          osmium merge osm/pt-*.pbf -o out/pfaedle.osm.pbf --overwrite
+          ls -la out
+      - name: Streckennetz bauen
+        run: |
+          cd scripts
+          python build_network.py ../out/network.json ../osm/rail-germany.pbf $(ls ../osm/rail-*.pbf | grep -v germany)
+      - name: Grenzen bauen
+        run: |
+          NE=https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson
+          curl -sSfL -o osm/admin0.geojson $NE/ne_10m_admin_0_countries.geojson
+          curl -sSfL -o osm/admin1.geojson $NE/ne_10m_admin_1_states_provinces.geojson
+          cd scripts && python build_borders.py ../osm/admin0.geojson ../osm/admin1.geojson ../out
+      - name: Im Release "netz" ablegen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view netz >/dev/null 2>&1 || gh release create netz --title "Streckennetz (automatisch)" --notes "Wird monatlich automatisch erzeugt."
+          gh release upload netz out/* --clobber
