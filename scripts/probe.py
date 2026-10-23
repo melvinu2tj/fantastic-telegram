@@ -1,68 +1,64 @@
-"""Einmalige Erkundung der Datenquellen (läuft in GitHub Actions)."""
-import csv, io, sys, time, zipfile, urllib.request
-from collections import Counter
+"""Erkundung: Echtzeit-Abdeckung für aktuell fahrende Züge (läuft in GitHub Actions)."""
+import csv, io, zipfile, urllib.request, datetime as dt
+from collections import Counter, defaultdict
+from zoneinfo import ZoneInfo
+from google.transit import gtfs_realtime_pb2
 
-FEEDS = {
-    "fv": "https://download.gtfs.de/germany/fv_free/latest.zip",
-    "rv": "https://download.gtfs.de/germany/rv_free/latest.zip",
-}
-RT = "https://realtime.gtfs.de/realtime-free.pb"
+TZ = ZoneInfo("Europe/Berlin")
+FEEDS = {"fv": "https://download.gtfs.de/germany/fv_free/latest.zip",
+         "rv": "https://download.gtfs.de/germany/rv_free/latest.zip"}
 
 
 def get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "zugkarte-probe", "Origin": "https://example.org"})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return r.read(), dict(r.headers)
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "zugkarte"}), timeout=120) as r:
+        return r.read()
 
 
-trip_ids = {}
+fm = gtfs_realtime_pb2.FeedMessage()
+fm.ParseFromString(get("https://realtime.gtfs.de/realtime-free.pb"))
+rt = {e.trip_update.trip.trip_id: e.trip_update for e in fm.entity if e.HasField("trip_update")}
+now = dt.datetime.fromtimestamp(fm.header.timestamp, TZ)
+print("RT time", now, "trip updates", len(rt))
+day = now.date()
+ds = day.strftime("%Y%m%d")
+wd = day.weekday()
+secs_now = now.hour * 3600 + now.minute * 60 + now.second
+
 for name, url in FEEDS.items():
-    data, _ = get(url)
-    z = zipfile.ZipFile(io.BytesIO(data))
-    print(f"\n=== {name}: {len(data)/1e6:.1f} MB")
-    for i in z.infolist():
-        print(f"  {i.filename:28s} {i.file_size/1e6:8.2f} MB")
-    def rows(fn):
-        return list(csv.DictReader(io.TextIOWrapper(z.open(fn), "utf-8-sig")))
-    routes = rows("routes.txt")
-    print("  route_type:", Counter(r["route_type"] for r in routes).most_common())
-    print("  agencies:", Counter(r.get("agency_id") for r in routes).most_common(8))
-    print("  route names sample:", [r.get("route_short_name") for r in routes[:40]])
-    trips = rows("trips.txt")
-    print("  trips:", len(trips), "keys:", list(trips[0].keys()))
-    print("  trip sample:", trips[:2])
-    trip_ids[name] = {t["trip_id"] for t in trips}
-    st = z.open("stop_times.txt")
-    print("  stop_times header+2:", [st.readline().decode().strip() for _ in range(3)])
-    for fn in ("calendar.txt", "calendar_dates.txt", "stops.txt", "feed_info.txt"):
-        if fn in z.namelist():
-            f = z.open(fn)
-            print(f"  {fn}:", [f.readline().decode().strip() for _ in range(3)])
-
-for attempt in range(1):
-    t = time.time()
-    data, headers = get(RT)
-    print(f"\n=== realtime: {len(data)/1e6:.2f} MB in {time.time()-t:.1f}s")
-    print("  headers:", {k: v for k, v in headers.items()})
-    try:
-        from google.transit import gtfs_realtime_pb2
-    except ImportError:
-        sys.exit("gtfs-realtime-bindings fehlt")
-    fm = gtfs_realtime_pb2.FeedMessage()
-    fm.ParseFromString(data)
-    print("  header:", fm.header)
-    ents = list(fm.entity)
-    tu = [e.trip_update for e in ents if e.HasField("trip_update")]
-    print("  entities:", len(ents), "trip_updates:", len(tu))
-    ids = [u.trip.trip_id for u in tu]
-    for name, s in trip_ids.items():
-        print(f"  match {name}: {sum(1 for i in ids if i in s)} of {len(s)} trips")
-    matched = [u for u in tu if u.trip.trip_id in trip_ids["fv"]][:2]
-    print("  fv sample:", [(u.trip, len(u.stop_time_update), u.stop_time_update[0] if u.stop_time_update else None) for u in matched])
-    import random
-    smp=random.sample(tu, 5)
-    print("  random trip ids:", [(u.trip.trip_id, u.trip.route_id, u.trip.start_date) for u in smp])
-    rl = Counter(u.trip.schedule_relationship for u in tu)
-    print("  schedule_relationship:", rl)
-    if attempt == 0:
-        time.sleep(15)
+    z = zipfile.ZipFile(io.BytesIO(get(url)))
+    rows = lambda fn: csv.DictReader(io.TextIOWrapper(z.open(fn), "utf-8-sig"))
+    active = set()
+    for r in rows("calendar.txt"):
+        if r["start_date"] <= ds <= r["end_date"] and r[["monday","tuesday","wednesday","thursday","friday","saturday","sunday"][wd]] == "1":
+            active.add(r["service_id"])
+    for r in rows("calendar_dates.txt"):
+        if r["date"] == ds:
+            (active.add if r["exception_type"] == "1" else active.discard)(r["service_id"])
+    routes = {r["route_id"]: r for r in rows("routes.txt")}
+    trips = {t["trip_id"]: t for t in rows("trips.txt") if t["service_id"] in active}
+    st = defaultdict(list)
+    for r in rows("stop_times.txt"):
+        if r["trip_id"] in trips:
+            st[r["trip_id"]].append(r)
+    def sec(s):
+        h, m, x = map(int, s.split(":")); return h * 3600 + m * 60 + x
+    running = [t for t, s in st.items() if sec(s[0]["departure_time"]) <= secs_now <= sec(s[-1]["arrival_time"])]
+    print(f"\n=== {name}: trips today {len(trips)}, running now {len(running)}")
+    has = [t for t in running if t in rt]
+    ok = 0
+    for t in has:
+        sids = {r["stop_id"] for r in st[t]}
+        u = rt[t]
+        if all((not x.stop_id) or x.stop_id in sids for x in u.stop_time_update):
+            ok += 1
+    print(f"  running with RT: {len(has)}, stop_ids consistent: {ok}")
+    by_agency = Counter(routes[trips[t]["route_id"]]["agency_id"] for t in running)
+    by_agency_rt = Counter(routes[trips[t]["route_id"]]["agency_id"] for t in has)
+    print("  coverage by agency (running, with rt):", [(a, n, by_agency_rt[a]) for a, n in by_agency.most_common(25)])
+    by_line = Counter(routes[trips[t]["route_id"]]["route_short_name"].split(" ")[0] for t in running)
+    by_line_rt = Counter(routes[trips[t]["route_id"]]["route_short_name"].split(" ")[0] for t in has)
+    print("  by product:", [(a, n, by_line_rt[a]) for a, n in by_line.most_common(30)])
+    if name == "rv":
+        print("  sample route names:", Counter(r["route_short_name"] for r in routes.values()).most_common(60))
+    ag = {r["agency_id"]: r["agency_name"] for r in rows("agency.txt")}
+    print("  agencies:", [(a, ag.get(a)) for a, _ in by_agency.most_common(25)])
