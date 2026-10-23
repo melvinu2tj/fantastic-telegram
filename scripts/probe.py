@@ -39,7 +39,7 @@ for name, url in FEEDS.items():
             f = z.open(fn)
             print(f"  {fn}:", [f.readline().decode().strip() for _ in range(3)])
 
-for attempt in range(2):
+for attempt in range(1):
     t = time.time()
     data, headers = get(RT)
     print(f"\n=== realtime: {len(data)/1e6:.2f} MB in {time.time()-t:.1f}s")
@@ -58,7 +58,10 @@ for attempt in range(2):
     for name, s in trip_ids.items():
         print(f"  match {name}: {sum(1 for i in ids if i in s)} of {len(s)} trips")
     matched = [u for u in tu if u.trip.trip_id in trip_ids["fv"]][:2]
-    print("  fv sample:", matched)
+    print("  fv sample:", [(u.trip, len(u.stop_time_update), u.stop_time_update[0] if u.stop_time_update else None) for u in matched])
+    import random
+    smp=random.sample(tu, 5)
+    print("  random trip ids:", [(u.trip.trip_id, u.trip.route_id, u.trip.start_date) for u in smp])
     rl = Counter(u.trip.schedule_relationship for u in tu)
     print("  schedule_relationship:", rl)
     if attempt == 0:
