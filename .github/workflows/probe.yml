@@ -1,0 +1,17 @@
+name: probe
+on:
+  push:
+    paths: [scripts/probe.py, .github/workflows/probe.yml]
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install gtfs-realtime-bindings
+      - run: python scripts/probe.py
+      - run: curl -sI -H "Origin: https://melvinu2tj.github.io" https://realtime.gtfs.de/realtime-free.pb
+      - run: docker run --rm ghcr.io/ad-freiburg/pfaedle:latest --help | head -60 || docker run --rm adfreiburg/pfaedle --help | head -60
+      - run: df -h; free -g; nproc
