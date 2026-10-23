@@ -1,0 +1,64 @@
+# Täglich: Fahrplan laden, Fahrten mit pfaedle auf die Gleise legen, Karte veröffentlichen.
+name: daten
+on:
+  schedule:
+    - cron: "15 1 * * *"   # ca. 03:15 Uhr deutscher Zeit
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [web/**, scripts/build_trips.py, .github/workflows/daten.yml]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: daten
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Streckennetz aus Release "netz" holen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download netz -D netz
+      - name: Fahrplan laden und filtern
+        run: |
+          mkdir -p work
+          curl -sSfL --retry 3 -o work/fv.zip https://download.gtfs.de/germany/fv_free/latest.zip
+          curl -sSfL --retry 3 -o work/rv.zip https://download.gtfs.de/germany/rv_free/latest.zip
+          cd scripts
+          python build_trips.py prepare ../work/fv.zip ../work/fv 0
+          python build_trips.py prepare ../work/rv.zip ../work/rv 1
+      - name: Fahrten auf Gleise legen (pfaedle)
+        run: |
+          for f in fv rv; do
+            docker run --rm -v "$PWD:/w" ghcr.io/ad-freiburg/pfaedle:latest \
+              -x /w/netz/pfaedle.osm.pbf -m rail -D -o /w/work/$f-out /w/work/$f
+            sudo chown -R $(id -u) work/$f-out
+            cp work/$f/typ work/$f-out/typ
+          done
+      - name: Daten für die Karte bauen
+        run: |
+          mkdir -p site/data
+          cp -r web/. site/
+          cp netz/network.json netz/borders.json site/data/
+          cd scripts && python build_trips.py build ../site/data ../netz/de.geojson ../work/fv-out ../work/rv-out
+          ls -la ../site/data
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
