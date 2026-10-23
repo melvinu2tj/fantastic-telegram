@@ -1,0 +1,44 @@
+# Bei Bedarf: Screenshot der veröffentlichten Karte erstellen und prüfen, ob die Echtzeit-Funktion antwortet.
+name: vorschau
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  vorschau:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Daten und Echtzeit prüfen
+        run: |
+          B=https://melvinu2tj.github.io/fantastic-telegram
+          curl -sS $B/data/version.json; echo
+          for f in segments network borders ids; do printf "%s: " $f; curl -sS -o /dev/null -w "%{size_download} Bytes\n" $B/data/$f.json; done
+          curl -sS $B/data/day-$(TZ=Europe/Berlin date +%Y%m%d).json | python3 -c "import json,sys,collections; d=json.load(sys.stdin); print('Fahrten heute:', len(d['trips']), collections.Counter(t[1] for t in d['trips']))"
+          curl -sS https://fantastic-telegram-35tn.vercel.app/api/delays | python3 -c "import json,sys; d=json.load(sys.stdin); print('Vercel:', {k:(len(v) if isinstance(v,(list,dict)) else v) for k,v in d.items()})"
+      - name: Screenshot
+        run: |
+          npm i -s playwright@1.48.2 && npx playwright install --with-deps chromium >/dev/null
+          cat > shot.js <<'JS'
+          const { chromium } = require('playwright');
+          (async () => {
+            const b = await chromium.launch();
+            const p = await b.newPage({ viewport: { width: 1920, height: 1080 } });
+            p.on('console', m => console.log('console', m.type(), m.text()));
+            await p.goto('https://melvinu2tj.github.io/fantastic-telegram/');
+            await p.waitForTimeout(15000);
+            console.log('aktive Züge:', await p.evaluate(() => aktiv.length));
+            await p.screenshot({ path: 'vorschau.png' });
+            await p.evaluate(() => { view.s *= 3.2; view.ox = view.ox * 3.2 - innerWidth * 2.0; view.oy = view.oy * 3.2 - innerHeight * 1.3; zeichneNetz(); });
+            await p.waitForTimeout(500);
+            await p.screenshot({ path: 'vorschau-zoom.png' });
+            await b.close();
+          })();
+          JS
+          node shot.js
+      - name: Im Release "vorschau" ablegen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view vorschau >/dev/null 2>&1 || gh release create vorschau --title "Vorschau" --notes "Screenshots der Karte."
+          gh release upload vorschau vorschau.png vorschau-zoom.png --clobber
