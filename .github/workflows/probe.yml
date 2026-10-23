@@ -9,9 +9,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.12"}
+        with:
+          python-version: "3.12"
       - run: pip install gtfs-realtime-bindings
       - run: python scripts/probe.py
-      - run: curl -sI -H "Origin: https://melvinu2tj.github.io" https://realtime.gtfs.de/realtime-free.pb
-      - run: docker run --rm ghcr.io/ad-freiburg/pfaedle:latest --help | head -60 || docker run --rm adfreiburg/pfaedle --help | head -60
+      - name: CORS
+        run: |
+          curl -sI -H "Origin: https://melvinu2tj.github.io" https://realtime.gtfs.de/realtime-free.pb
+      - name: pfaedle
+        run: |
+          docker run --rm ghcr.io/ad-freiburg/pfaedle:latest --help | head -80 || docker run --rm adfreiburg/pfaedle --help | head -80
       - run: df -h; free -g; nproc
