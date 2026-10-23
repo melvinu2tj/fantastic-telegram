@@ -1,0 +1,6 @@
+{
+  "regions": ["fra1"],
+  "functions": { "api/delays.js": { "maxDuration": 30, "memory": 1024 } },
+  "buildCommand": "",
+  "outputDirectory": "web"
+}

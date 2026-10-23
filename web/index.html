@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zugkarte</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #04060a; overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  #status { position: fixed; right: 12px; bottom: 8px; font: 11px system-ui, sans-serif; color: rgba(160,175,200,.35); }
+</style>
+</head>
+<body>
+<canvas id="netz"></canvas>
+<canvas id="zuege"></canvas>
+<div id="status"></div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
