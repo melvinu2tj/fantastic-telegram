@@ -18,6 +18,14 @@ jobs:
           python-version: "3.12"
       - run: sudo apt-get update -q && sudo apt-get install -y -q osmium-tool
       - run: pip install osmium shapely
+      # Gefilterte OSM-Daten eines Monats zwischenspeichern, damit ein Neustart nicht alles neu lädt
+      - id: monat
+        run: echo "m=$(date +%Y%m)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        with:
+          path: osm
+          key: osm-${{ steps.monat.outputs.m }}-${{ github.run_id }}
+          restore-keys: osm-${{ steps.monat.outputs.m }}-
       - name: OSM-Ausschnitte laden und filtern
         run: |
           mkdir -p osm out
@@ -26,6 +34,7 @@ jobs:
                    czech-republic poland denmark slovakia hungary slovenia sweden lithuania \
                    italy/nord-est italy/nord-ovest united-kingdom/england russia/kaliningrad; do
             n=$(echo $c | tr / -)
+            [ -f osm/rail-$n.pbf ] && { echo "$c schon vorhanden"; continue; }
             [ $c = russia/kaliningrad ] && url=https://download.geofabrik.de/russia/kaliningrad-latest.osm.pbf || url=$GF/$c-latest.osm.pbf
             echo "::group::$c"
             if ! curl -sSfL --retry 3 -o osm/raw.pbf "$url"; then
@@ -42,6 +51,11 @@ jobs:
           done
           osmium merge osm/pt-*.pbf -o out/pfaedle.osm.pbf --overwrite
           ls -la out
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: osm
+          key: osm-${{ steps.monat.outputs.m }}-${{ github.run_id }}
       - name: Streckennetz bauen
         run: |
           cd scripts
