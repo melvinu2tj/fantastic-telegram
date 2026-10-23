@@ -24,11 +24,15 @@ jobs:
           GF=https://download.geofabrik.de/europe
           for c in germany france netherlands belgium luxembourg switzerland liechtenstein austria \
                    czech-republic poland denmark slovakia hungary slovenia sweden lithuania \
-                   italy/nord-est italy/nord-ovest great-britain/england russia/kaliningrad; do
+                   italy/nord-est italy/nord-ovest united-kingdom/england russia/kaliningrad; do
             n=$(echo $c | tr / -)
             [ $c = russia/kaliningrad ] && url=https://download.geofabrik.de/russia/kaliningrad-latest.osm.pbf || url=$GF/$c-latest.osm.pbf
             echo "::group::$c"
-            curl -sSfL --retry 3 -o osm/raw.pbf "$url"
+            if ! curl -sSfL --retry 3 -o osm/raw.pbf "$url"; then
+              # Ein fehlendes Nachbarland soll den Lauf nicht abbrechen, Deutschland schon
+              [ $c = germany ] && exit 1
+              echo "::warning::$c nicht ladbar, wird übersprungen"; echo "::endgroup::"; continue
+            fi
             osmium extract -b -4.7,45.4,25.6,56.9 --set-bounds -s smart osm/raw.pbf -o osm/box.pbf --overwrite
             osmium tags-filter osm/box.pbf nwr/railway nwr/public_transport r/route=train,railway nwr/train -o osm/pt-$n.pbf --overwrite
             osmium tags-filter osm/pt-$n.pbf w/railway=rail r/route=train,railway -o osm/rail-$n.pbf --overwrite
