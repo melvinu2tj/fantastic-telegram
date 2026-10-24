@@ -271,7 +271,8 @@ function zeichneNetz() {
   };
   strich(grenzen.countries, "rgba(170,185,210,0.18)", cfg.grenze || 1.8);
   const zoomt = zoomLaender.length > 0;
-  if (cfg.laender || zoomt) strich(grenzen.states, "rgba(170,185,210,0.10)", 0.8);
+  // Beim Zoomen sind die Bundesländergrenzen deutlicher, damit man die Nachbarn erkennt
+  if (cfg.laender || zoomt) strich(grenzen.states, `rgba(170,185,210,${zoomt ? 0.22 : 0.10})`, zoomt ? 1.0 : 0.8);
   for (const i of [2, 1, 0]) strich(netzDaten[i], SPUREN[i].farbe, SPUREN[i].breite);
   if (zoomt) {
     // Alles außerhalb der gewählten Bundesländer abdunkeln
