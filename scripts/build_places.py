@@ -49,7 +49,8 @@ def main(a1, out, *orte):
         for k in osmium.FileProcessor(datei, osmium.osm.NODE):
             t = dict(k.tags)
             n = einwohner(t)
-            name = t.get("name:de") or t.get("name")
+            # Ortsübliche Namen (Szczecin statt Stettin)
+            name = t.get("name")
             lon, lat = k.location.lon, k.location.lat
             # Grenznahe Orte stehen in mehreren Länder-Auszügen
             if n < MIN_EINWOHNER or not name or k.id in gesehen or not (x0 <= lon <= x1 and y0 <= lat <= y1):

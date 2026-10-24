@@ -30,6 +30,7 @@ const SPUREN = [
 const DE_BOX = { x0: 0, y0: 0, x1: 0, y1: 0 };
 
 let meta = null, netzDaten = null, grenzen = null, orte = null, zoomLaender = [];
+let innen = null, aussen = null;   // Umriss der gewählten Bundesländer und alles außerhalb
 let segs = [], hidden = new Set();
 let fahrten = new Map();     // "tripId|YYYYMMDD" -> Fahrt
 let aktiv = [];
@@ -237,6 +238,14 @@ function groesse() {
     ox: w * dpr / 2 + (cfg.versatz || 0) * w * dpr - cx * s,
     oy: h * dpr / 2 - cy * s,
   };
+  innen = aussen = null;
+  if (zoomLaender.length) {
+    innen = new Path2D(); aussen = new Path2D();
+    aussen.rect(0, 0, w * dpr, h * dpr);
+    for (const l of zoomLaender) for (const enc of l.umriss) {
+      for (const p of [innen, aussen]) { linie(p, enc); p.closePath(); }
+    }
+  }
   zeichneNetz();
   baueSprites();
 }
@@ -266,11 +275,9 @@ function zeichneNetz() {
   for (const i of [2, 1, 0]) strich(netzDaten[i], SPUREN[i].farbe, SPUREN[i].breite);
   if (zoomt) {
     // Alles außerhalb der gewählten Bundesländer abdunkeln
-    c.beginPath();
-    c.rect(0, 0, netz.width, netz.height);
-    for (const l of zoomLaender) for (const enc of l.umriss) { linie(c, enc); c.closePath(); }
     c.fillStyle = "rgba(4,6,10,0.6)";
-    c.fill("evenodd");
+    c.fill(aussen, "evenodd");
+    c.strokeStyle = "rgba(170,185,210,0.24)"; c.lineWidth = 1.1 * view.k; c.stroke(innen);
   }
   if (orte && (cfg.staedte ?? zoomt)) zeichneStaedte(c);
 }
@@ -289,7 +296,9 @@ function zeichneStaedte(c) {
     const bw = c.measureText(name).width, r = [px + 4 * k, py - fs * 0.6, px + 4 * k + bw, py + fs * 0.6];
     if (belegt.some(b => r[0] < b[2] + 4 && r[2] > b[0] - 4 && r[1] < b[3] + 2 && r[3] > b[1] - 2)) continue;
     belegt.push(r);
-    c.fillStyle = gross ? "rgba(190,203,225,0.50)" : "rgba(190,203,225,0.32)";
+    // Außerhalb der gewählten Bundesländer nur halb so hell
+    const a = (gross ? 0.50 : 0.32) * (innen && !c.isPointInPath(innen, px, py) ? 0.45 : 1);
+    c.fillStyle = `rgba(190,203,225,${a})`;
     c.beginPath(); c.arc(px, py, 1.3 * k, 0, 2 * Math.PI); c.fill();
     c.fillText(name, r[0], py);
   }
@@ -394,6 +403,12 @@ function zeichneZuege() {
       const s = sp[stufe(verzug)];
       ctx.drawImage(s.c, P[0] * view.s + view.ox - s.m, P[1] * view.s + view.oy - s.m);
     }
+  }
+  if (aussen) {
+    // Züge außerhalb der gewählten Bundesländer abschwächen
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fill(aussen, "evenodd");
   }
 }
 
