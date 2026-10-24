@@ -33,6 +33,11 @@ jobs:
             await p.waitForTimeout(15000);
             console.log('Städte:', await p.evaluate(() => orte.length));
             await p.screenshot({ path: 'vorschau-zoom.png' });
+            // Den am stärksten verspäteten Zug anklicken
+            const pt = await p.evaluate(() => { let b = -1; for (let i = 0; i < tN; i++) if (b < 0 || tV[i] > tV[b]) b = i; return b < 0 ? null : [tX[b] / view.dpr, tY[b] / view.dpr]; });
+            if (pt) { await p.mouse.click(pt[0], pt[1]); await p.waitForTimeout(500); }
+            console.log('Karte:', await p.evaluate(() => karte.innerText), await p.evaluate(() => karte.querySelector('a')?.href));
+            await p.screenshot({ path: 'vorschau-klick.png' });
             await b.close();
           })();
           JS
@@ -42,4 +47,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view vorschau >/dev/null 2>&1 || gh release create vorschau --title "Vorschau" --notes "Screenshots der Karte."
-          gh release upload vorschau vorschau.png vorschau-zoom.png --clobber
+          gh release upload vorschau vorschau.png vorschau-zoom.png vorschau-klick.png --clobber
