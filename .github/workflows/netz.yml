@@ -34,7 +34,7 @@ jobs:
                    czech-republic poland denmark slovakia hungary slovenia sweden lithuania \
                    italy/nord-est italy/nord-ovest united-kingdom/england russia/kaliningrad; do
             n=$(echo $c | tr / -)
-            [ -f osm/rail-$n.pbf ] && { echo "$c schon vorhanden"; continue; }
+            [ -f osm/rail-$n.pbf ] && [ -f osm/orte-$n.pbf ] && { echo "$c schon vorhanden"; continue; }
             [ $c = russia/kaliningrad ] && url=https://download.geofabrik.de/russia/kaliningrad-latest.osm.pbf || url=$GF/$c-latest.osm.pbf
             echo "::group::$c"
             if ! curl -sSfL --retry 3 -o osm/raw.pbf "$url"; then
@@ -45,6 +45,7 @@ jobs:
             osmium extract -b -4.7,45.4,25.6,56.9 --set-bounds -s smart osm/raw.pbf -o osm/box.pbf --overwrite
             osmium tags-filter osm/box.pbf nwr/railway nwr/public_transport r/route=train,railway nwr/train -o osm/pt-$n.pbf --overwrite
             osmium tags-filter osm/pt-$n.pbf w/railway=rail r/route=train,railway -o osm/rail-$n.pbf --overwrite
+            osmium tags-filter osm/box.pbf n/place=city,town -o osm/orte-$n.pbf --overwrite
             rm osm/raw.pbf osm/box.pbf
             ls -la osm/*-$n.pbf
             echo "::endgroup::"
@@ -68,11 +69,7 @@ jobs:
           cd scripts && python build_borders.py ../osm/admin0.geojson ../osm/admin1.geojson ../out
       - name: Bundesländer und Städte ab 15.000 Einwohnern
         run: |
-          Q='[out:json][timeout:300];node["place"~"^(city|town)$"]["population"](45.4,-4.7,56.9,25.6);out;'
-          for u in https://overpass-api.de/api/interpreter https://overpass.kumi.systems/api/interpreter; do
-            curl -sSf --retry 2 -m 400 --data-urlencode "data=$Q" -o osm/orte.json $u && break
-          done
-          cd scripts && python build_places.py ../osm/admin1.geojson ../osm/orte.json ../out/places.json
+          cd scripts && python build_places.py ../osm/admin1.geojson ../out/places.json ../osm/orte-*.pbf
       - name: Im Release "netz" ablegen
         env:
           GH_TOKEN: ${{ github.token }}

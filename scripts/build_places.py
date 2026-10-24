@@ -1,9 +1,10 @@
 """Bundesländer (für den Zoom) und Städte ab 15.000 Einwohnern (für die Beschriftung).
 
-Aufruf: build_places.py admin1.geojson orte.json out.json
-orte.json ist die Antwort einer Overpass-Abfrage nach place=city/town.
+Aufruf: build_places.py admin1.geojson out.json orte-*.pbf
+Die pbf-Dateien enthalten die OSM-Knoten mit place=city/town (osmium tags-filter).
 """
 import json, re, sys, unicodedata
+import osmium
 from shapely.geometry import shape
 import geo
 
@@ -26,7 +27,7 @@ def einwohner(tags):
         return 0
 
 
-def main(a1, orte, out):
+def main(a1, out, *orte):
     laender = {}
     for f in json.load(open(a1))["features"]:
         p = f["properties"]
@@ -43,14 +44,19 @@ def main(a1, orte, out):
         laender[slug(p["name"])] = {"name": p["name"], "box": [round(x0), round(y0), round(x1), round(y1)], "umriss": ringe}
     staedte = []
     x0, y0, x1, y1 = geo.BBOX
-    for e in json.load(open(orte))["elements"]:
-        t = e.get("tags", {})
-        n = einwohner(t)
-        name = t.get("name:de") or t.get("name")
-        if n < MIN_EINWOHNER or not name or not (x0 <= e["lon"] <= x1 and y0 <= e["lat"] <= y1):
-            continue
-        x, y = geo.project(e["lon"], e["lat"])
-        staedte.append([round(x), round(y), name, n])
+    gesehen = set()
+    for datei in orte:
+        for k in osmium.FileProcessor(datei, osmium.osm.NODE):
+            t = dict(k.tags)
+            n = einwohner(t)
+            name = t.get("name:de") or t.get("name")
+            lon, lat = k.location.lon, k.location.lat
+            # Grenznahe Orte stehen in mehreren Länder-Auszügen
+            if n < MIN_EINWOHNER or not name or k.id in gesehen or not (x0 <= lon <= x1 and y0 <= lat <= y1):
+                continue
+            gesehen.add(k.id)
+            x, y = geo.project(lon, lat)
+            staedte.append([round(x), round(y), name, n])
     staedte.sort(key=lambda s: -s[3])
     json.dump({"laender": laender, "staedte": staedte}, open(out, "w"), separators=(",", ":"), ensure_ascii=False)
     print("Bundesländer:", sorted(laender), "Städte:", len(staedte))
