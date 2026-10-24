@@ -39,6 +39,16 @@ Namen für `land`: baden-wuerttemberg, bayern, berlin, brandenburg, bremen, hamb
 mecklenburg-vorpommern, niedersachsen, nordrhein-westfalen, rheinland-pfalz, saarland, sachsen,
 sachsen-anhalt, schleswig-holstein, thueringen
 
+## Bedienen
+
+- **Zug anklicken**: zeigt Linie, Start und Ziel mit Uhrzeit und die aktuelle Verspätung, dazu einen Link,
+  der die Verbindung auf bahn.de öffnet. Verspätete Züge werden beim Klicken bevorzugt getroffen.
+- **Mausrad**: hinein- und herauszoomen. Ab etwa 2,5-facher Vergrößerung erscheinen Städtenamen.
+- **Ziehen**: Karte verschieben.
+- **Doppelklick** auf eine leere Stelle: zurück zur Ausgangsansicht.
+
+In Lively muss dafür unter Einstellungen → Hintergrund die Mauseingabe eingeschaltet sein (Standard).
+
 ## Wie es funktioniert
 
 - **Monatlich** (`.github/workflows/netz.yml`): Bahnstrecken aus OpenStreetMap und Grenzen aus

@@ -108,7 +108,8 @@ async function ladeGrunddaten() {
 
 async function ladeTag(datum) {
   const d = await json(DATA + "day-" + datum + ".json");
-  for (const [id, typ, name, seq, legs, dt] of d.trips) {
+  const namen = d.namen || [];
+  for (const [id, typ, name, seq, legs, dt, info] of d.trips) {
     const t = new Int32Array(dt.length);
     let acc = 0;
     for (let i = 0; i < dt.length; i++) { acc += dt[i]; t[i] = acc * 60; }
@@ -117,6 +118,7 @@ async function ladeTag(datum) {
     fahrten.set(id + "|" + datum, {
       key: id + "|" + datum, datum, art: typ === 0 ? "fern" : SBAHN.test(name.trim()) ? "sbahn" : "regio", name, legs, seqs,
       plan: t, ist: t, verzug: new Int32Array(n), weg: false,
+      info: info ? [namen[info[0]], namen[info[1]], info[2]] : null,
     });
   }
 }
@@ -240,16 +242,40 @@ function groesse() {
     ox: w * dpr / 2 + (cfg.versatz || 0) * w * dpr - cx * s,
     oy: h * dpr / 2 - cy * s,
   };
+  startZoom = zoom;
+  neuZeichnen();
+}
+
+// Netz, Umriss und Leuchtpunkte für die aktuelle Ansicht neu aufbauen
+function neuZeichnen() {
+  view.k = view.basis * (1 + 0.3 * Math.log2(Math.max(1, view.zoom)));
   innen = aussen = null;
   if (zoomLaender.length) {
     innen = new Path2D(); aussen = new Path2D();
-    aussen.rect(0, 0, w * dpr, h * dpr);
+    aussen.rect(0, 0, netz.width, netz.height);
     for (const l of zoomLaender) for (const enc of l.umriss) {
       for (const p of [innen, aussen]) { linie(p, enc); p.closePath(); }
     }
   }
   zeichneNetz();
   baueSprites();
+}
+
+// ---------- Zoomen und Verschieben (Mausrad, Ziehen, Doppelklick setzt zurück) ----------
+
+let startZoom = 1, neuGeplant = false;
+function spaeterNeu() {
+  if (neuGeplant) return;
+  neuGeplant = true;
+  requestAnimationFrame(() => { neuGeplant = false; neuZeichnen(); });
+}
+function zoomeUm(px, py, faktor) {
+  const z = Math.min(40 * startZoom, Math.max(startZoom * 0.8, view.zoom * faktor));
+  faktor = z / view.zoom;
+  view.zoom = z; view.s *= faktor;
+  view.ox = px - (px - view.ox) * faktor;
+  view.oy = py - (py - view.oy) * faktor;
+  spaeterNeu();
 }
 
 function linie(c, enc) {
@@ -272,9 +298,9 @@ function zeichneNetz() {
     c.strokeStyle = farbe; c.lineWidth = breite * view.k; c.stroke();
   };
   strich(grenzen.countries, "rgba(170,185,210,0.18)", cfg.grenze || 1.8);
-  const zoomt = zoomLaender.length > 0;
+  const zoomt = zoomLaender.length > 0, nah = zoomt || view.zoom >= 2.5;
   // Beim Zoomen sind die Bundesländergrenzen deutlicher, damit man die Nachbarn erkennt
-  if (cfg.laender || zoomt) strich(grenzen.states, `rgba(170,185,210,${zoomt ? 0.22 : 0.10})`, zoomt ? 1.0 : 0.8);
+  if (cfg.laender || nah) strich(grenzen.states, `rgba(170,185,210,${nah ? 0.22 : 0.10})`, nah ? 1.0 : 0.8);
   for (const i of [2, 1, 0]) strich(netzDaten[i], SPUREN[i].farbe, SPUREN[i].breite);
   if (zoomt) {
     // Alles außerhalb der gewählten Bundesländer abdunkeln
@@ -282,7 +308,7 @@ function zeichneNetz() {
     c.fill(aussen, "evenodd");
     c.strokeStyle = "rgba(170,185,210,0.24)"; c.lineWidth = 1.1 * view.k; c.stroke(innen);
   }
-  if (orte && (cfg.staedte ?? zoomt)) zeichneStaedte(c);
+  if (orte && (cfg.staedte ?? nah)) zeichneStaedte(c);
 }
 
 // Städtenamen: größte zuerst, überlappende werden weggelassen
@@ -374,7 +400,17 @@ function punktAuf(seg, anteil, out) {
 }
 
 const P = [0, 0];
+// Positionen des letzten Bildes, zum Anklicken
+let tN = 0, tX = new Float32Array(8192), tY = new Float32Array(8192), tV = new Int32Array(8192), tF = [];
+function merke(f, x, y, v) {
+  if (tN === tX.length) {
+    const g = a => { const b = new a.constructor(a.length * 2); b.set(a); return b; };
+    tX = g(tX); tY = g(tY); tV = g(tV);
+  }
+  tX[tN] = x; tY[tN] = y; tV[tN] = v; tF[tN] = f; tN++;
+}
 function zeichneZuege() {
+  tN = 0;
   ctx.globalCompositeOperation = "source-over";
   ctx.clearRect(0, 0, zuege.width, zuege.height);
   ctx.globalCompositeOperation = "lighter";
@@ -403,10 +439,12 @@ function zeichneZuege() {
       }
       if (hidden.has(seg)) continue;
       punktAuf(segs[seg], anteil, P);
-      const s = sp[stufe(verzug)];
-      ctx.drawImage(s.c, P[0] * view.s + view.ox - s.m, P[1] * view.s + view.oy - s.m);
+      const s = sp[stufe(verzug)], x = P[0] * view.s + view.ox, y = P[1] * view.s + view.oy;
+      ctx.drawImage(s.c, x - s.m, y - s.m);
+      merke(f, x, y, verzug);
     }
   }
+  zeigeAuswahl();
   if (aussen) {
     // Züge außerhalb der gewählten Bundesländer abschwächen
     ctx.globalCompositeOperation = "destination-out";
@@ -414,6 +452,99 @@ function zeichneZuege() {
     ctx.fill(aussen, "evenodd");
   }
 }
+
+// ---------- Anklicken: welcher Zug ist das? ----------
+
+const karte = document.getElementById("karte");
+let auswahl = null, auswahlBis = 0;
+
+// Nächster Zug am Mauszeiger; verspätete Züge werden bevorzugt, damit man sie auch in der Gesamtansicht trifft
+function zugAn(cx, cy) {
+  const px = cx * view.dpr, py = cy * view.dpr, R = 16 * view.dpr;
+  let best = -1, wert = Infinity;
+  for (let i = 0; i < tN; i++) {
+    const d = Math.hypot(tX[i] - px, tY[i] - py);
+    if (d > R) continue;
+    const w = d - (tV[i] >= 300 ? R * 0.5 : 0) - (tF[i].art === "fern" ? R * 0.15 : 0);
+    if (w < wert) { wert = w; best = i; }
+  }
+  return best < 0 ? null : tF[best];
+}
+
+function uhrzeit(datum, sek) {
+  const tag = datumPlus(datum, Math.floor(sek / DAY)), r = ((sek % DAY) + DAY) % DAY;
+  const z = n => String(Math.floor(n)).padStart(2, "0");
+  return { tag, text: `${z(r / 3600)}:${z(r / 60 % 60)}`, iso: `${tag.slice(0, 4)}-${tag.slice(4, 6)}-${tag.slice(6, 8)}T${z(r / 3600)}:${z(r / 60 % 60)}:00` };
+}
+
+function bahnLink(f) {
+  const [von, nach] = f.info;
+  const ab = uhrzeit(f.datum, f.plan[1]);
+  const e = encodeURIComponent;
+  return `https://www.bahn.de/buchung/fahrplan/suche#sts=true&so=${e(von)}&zo=${e(nach)}&kl=2&r=13:16:KLASSENLOS:1&hd=${ab.iso}&hza=D&ar=false&s=true&d=false&hz=%5B%5D&fm=false&bp=false`;
+}
+
+function fuelleKarte(f, verzug) {
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const nr = f.info && f.info[2] && !f.name.includes(f.info[2]) ? " " + f.info[2] : "";
+  const min = Math.round(verzug / 60);
+  const farbe = farbeFuer(FARBE[f.art], stufe(verzug)).join(",");
+  const lage = !f.roh ? "laut Fahrplan (keine Echtzeitdaten)" : min >= 1 ? `+${min} min` : "pünktlich";
+  let html = `<div class="zug" style="color:rgb(${farbe})">${esc(f.name || "Zug")}${esc(nr)}</div>`;
+  if (f.info) {
+    const ab = uhrzeit(f.datum, f.plan[1]), an = uhrzeit(f.datum, f.plan[f.plan.length - 2]);
+    html += `<div>${esc(f.info[0])} ${ab.text} → ${esc(f.info[1])} ${an.text}</div>`;
+  }
+  html += `<div class="lage">${lage}</div>`;
+  if (f.info) html += `<a href="${bahnLink(f)}" target="_blank" rel="noopener">Auf bahn.de öffnen</a>`;
+  karte.innerHTML = html;
+}
+
+// Karte neben dem gewählten Zug halten, mit feinem Ring um den Punkt
+function zeigeAuswahl() {
+  if (!auswahl) return;
+  let i = 0;
+  while (i < tN && tF[i] !== auswahl) i++;
+  if (i === tN || Date.now() > auswahlBis) { auswahl = null; karte.hidden = true; return; }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.beginPath(); ctx.arc(tX[i], tY[i], 9 * view.k, 0, 2 * Math.PI);
+  ctx.strokeStyle = "rgba(235,240,250,0.75)"; ctx.lineWidth = 1.2 * view.dpr; ctx.stroke();
+  if (auswahl.angezeigt !== tV[i]) { fuelleKarte(auswahl, tV[i]); auswahl.angezeigt = tV[i]; }
+  const x = tX[i] / view.dpr, y = tY[i] / view.dpr, b = karte.offsetWidth, h = karte.offsetHeight;
+  karte.style.left = (x + 16 + b > innerWidth ? x - 16 - b : x + 16) + "px";
+  karte.style.top = Math.min(innerHeight - h - 8, Math.max(8, y - h / 2)) + "px";
+  karte.hidden = false;
+}
+
+function waehle(f) {
+  auswahl = f; auswahlBis = Date.now() + 60e3;
+  if (f) f.angezeigt = null; else karte.hidden = true;
+}
+
+let ziehen = null;
+addEventListener("pointerdown", e => {
+  if (e.target.closest && e.target.closest("#karte")) return;
+  ziehen = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy, bewegt: false };
+});
+addEventListener("pointermove", e => {
+  if (!ziehen) { document.body.style.cursor = zugAn(e.clientX, e.clientY) ? "pointer" : ""; return; }
+  const dx = e.clientX - ziehen.x, dy = e.clientY - ziehen.y;
+  if (!ziehen.bewegt && Math.hypot(dx, dy) < 5) return;
+  ziehen.bewegt = true;
+  document.body.style.cursor = "grabbing";
+  view.ox = ziehen.ox + dx * view.dpr; view.oy = ziehen.oy + dy * view.dpr;
+  spaeterNeu();
+});
+addEventListener("pointerup", e => {
+  if (ziehen && !ziehen.bewegt) waehle(zugAn(e.clientX, e.clientY));
+  if (ziehen && ziehen.bewegt) document.body.style.cursor = "";
+  ziehen = null;
+});
+addEventListener("wheel", e => {
+  e.preventDefault();
+  zoomeUm(e.clientX * view.dpr, e.clientY * view.dpr, Math.exp(-e.deltaY * 0.0015));
+}, { passive: false });
+addEventListener("dblclick", e => { if (!zugAn(e.clientX, e.clientY)) { waehle(null); groesse(); } });
 
 // ---------- Ablauf ----------
 

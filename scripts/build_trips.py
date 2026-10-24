@@ -139,7 +139,9 @@ def build(outdir, de_geojson, *feeds):
     ids = set()
     for src in feeds:
         typ = int(open(os.path.join(src, "typ")).read())
-        stops = {s["stop_id"]: (float(s["stop_lon"]), float(s["stop_lat"])) for s in read(src, "stops.txt")}
+        stop_rows = read(src, "stops.txt")
+        stops = {s["stop_id"]: (float(s["stop_lon"]), float(s["stop_lat"])) for s in stop_rows}
+        stop_names = {s["stop_id"]: s.get("stop_name", "") for s in stop_rows}
         routes = {r["route_id"]: r["route_short_name"].strip() or r.get("route_long_name", "") for r in read(src, "routes.txt")}
         shapes = defaultdict(list)
         for r in read(src, "shapes.txt"):
@@ -197,7 +199,10 @@ def build(outdir, de_geojson, *feeds):
                     times.append(v if prev is None else v - prev)
                     prev = v
             seq = seqs[0] if seqs == list(range(seqs[0], seqs[0] + len(seqs))) else seqs
-            entry = [t["trip_id"], typ, routes.get(t["route_id"], ""), seq, legs, times]
+            # Start, Ziel und Zugnummer für die Anzeige beim Anklicken (Namen je Tag als Tabelle)
+            nr = (t.get("trip_short_name") or "").strip()
+            info = (stop_names.get(stop_ids[0], ""), stop_names.get(stop_ids[-1], ""), nr)
+            entry = [t["trip_id"], typ, routes.get(t["route_id"], ""), seq, legs, times, info]
             for d in days:
                 if t["service_id"] in services[d]:
                     day_trips[d].append(entry)
@@ -207,8 +212,15 @@ def build(outdir, de_geojson, *feeds):
     with open(os.path.join(outdir, "segments.json"), "w") as f:
         json.dump({"meta": geo.meta(), "s": segs, "h": hidden}, f, separators=(",", ":"))
     for d, trips in day_trips.items():
+        namen, index = [], {}
+        def nummer(n):
+            if n not in index:
+                index[n] = len(namen)
+                namen.append(n)
+            return index[n]
+        out = [e[:6] + [[nummer(e[6][0]), nummer(e[6][1]), e[6][2]]] for e in trips]
         with open(os.path.join(outdir, f"day-{d:%Y%m%d}.json"), "w") as f:
-            json.dump({"date": f"{d:%Y%m%d}", "trips": trips}, f, separators=(",", ":"))
+            json.dump({"date": f"{d:%Y%m%d}", "namen": namen, "trips": out}, f, separators=(",", ":"), ensure_ascii=False)
     with open(os.path.join(outdir, "ids.json"), "w") as f:
         json.dump(sorted(ids), f, separators=(",", ":"))
     with open(os.path.join(outdir, "version.json"), "w") as f:
