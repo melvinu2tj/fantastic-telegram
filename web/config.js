@@ -5,6 +5,7 @@ window.ZUGKARTE = {
   delaysUrl: "https://fantastic-telegram-35tn.vercel.app/api/delays",
   fps: 30,           // Bilder pro Sekunde
   laender: false,    // Bundesländergrenzen zeigen
+  grenze: 1.8,       // Strichstärke der Landesgrenzen
   versatz: 0,        // Karte seitlich verschieben (-0.3 … 0.3 Bildschirmbreiten), z. B. für Desktop-Icons
   helligkeit: 1,     // Leuchtstärke der Züge
 };

@@ -132,10 +132,11 @@ async function sichereTage() {
 
 // ---------- Verspätungen ----------
 
-function wendeVerspaetungAn(f) {
-  const u = verspaetung.d[f.key];
-  f.weg = verspaetung.c.includes(f.key);
-  if (!u) { f.ist = f.plan; f.verzug.fill(0); return; }
+// Neue Verspätungen werden nicht schlagartig übernommen, sondern über UEBERGANG Sekunden
+// eingeblendet. Sonst springt ein Zug, sobald sich seine Prognose um ein paar Minuten ändert.
+const UEBERGANG = 90;
+
+function berechneIst(f, u) {
   const n = f.seqs.length, ist = new Int32Array(2 * n);
   const upd = new Map();
   for (let i = 0; i < u.length; i += 3) upd.set(u[i], [u[i + 1], u[i + 2]]);
@@ -146,21 +147,57 @@ function wendeVerspaetungAn(f) {
     if (x) {
       an = x[0] ?? x[1]; ab = x[1] ?? x[0];
     }
-    let ta = Math.max(f.plan[2 * i] + an, letzte);
-    let tb = Math.max(f.plan[2 * i + 1] + ab, ta);
+    const ta = Math.max(f.plan[2 * i] + an, letzte);
+    const tb = Math.max(f.plan[2 * i + 1] + ab, ta);
     ist[2 * i] = ta; ist[2 * i + 1] = tb; letzte = tb;
     f.verzug[i] = ta - f.plan[2 * i];
     d = ab;
   }
-  f.ist = ist;
+  return ist;
 }
 
+function wendeVerspaetungAn(f, u, jetztMs, sofort) {
+  const neu = u ? berechneIst(f, u) : f.plan;
+  if (!u) f.verzug.fill(0);
+  // Startpunkt des Übergangs ist das, was gerade angezeigt wird
+  f.von = sofort ? null : Float64Array.from(zeiten(f, jetztMs).subarray(0, f.ist.length));
+  f.ist = neu;
+  f.seit = jetztMs;
+}
+
+// Aktuell gültige Zeiten einer Fahrt (während eines Übergangs gemischt)
+let puffer = new Float64Array(256);
+function zeiten(f, jetztMs) {
+  if (!f.von) return f.ist;
+  const k = (jetztMs - f.seit) / (UEBERGANG * 1000);
+  if (k >= 1) { f.von = null; return f.ist; }
+  const m = k * k * (3 - 2 * k);
+  if (puffer.length < f.ist.length) puffer = new Float64Array(f.ist.length * 2);
+  for (let i = 0; i < f.ist.length; i++) puffer[i] = f.von[i] + (f.ist[i] - f.von[i]) * m;
+  return puffer;
+}
+
+let mitUpdate = new Set(), ersteDaten = true;
 async function ladeVerspaetungen() {
   if (!cfg.delaysUrl) return;
   try {
     verspaetung = await json(cfg.delaysUrl);
-    verspaetung.c = verspaetung.c || [];
-    for (const f of fahrten.values()) wendeVerspaetungAn(f);
+    const jetztMs = Date.now();
+    const neu = new Set(Object.keys(verspaetung.d));
+    // Nur Fahrten anfassen, die jetzt oder vorher Verspätungsdaten hatten
+    for (const key of new Set([...neu, ...mitUpdate])) {
+      const f = fahrten.get(key);
+      if (!f) continue;
+      const u = verspaetung.d[key];
+      if (!u && !mitUpdate.has(key)) continue;
+      if (u && f.roh === JSON.stringify(u)) continue; // unverändert
+      f.roh = u ? JSON.stringify(u) : null;
+      wendeVerspaetungAn(f, u, jetztMs, ersteDaten);
+    }
+    mitUpdate = neu;
+    ersteDaten = false;
+    for (const f of fahrten.values()) f.weg = false;
+    for (const key of verspaetung.c || []) { const f = fahrten.get(key); if (f) f.weg = true; }
     waehleAktive();
   } catch (e) { console.warn("Verspätungen:", e); }
 }
@@ -205,7 +242,7 @@ function zeichneNetz() {
     for (const enc of liste) linie(c, enc);
     c.strokeStyle = farbe; c.lineWidth = breite * view.k; c.stroke();
   };
-  strich(grenzen.countries, "rgba(170,185,210,0.10)", 0.8);
+  strich(grenzen.countries, "rgba(170,185,210,0.18)", cfg.grenze || 1.8);
   if (cfg.laender) strich(grenzen.states, "rgba(170,185,210,0.06)", 0.6);
   for (const i of [2, 1, 0]) strich(netzDaten[i], SPUREN[i].farbe, SPUREN[i].breite);
 }
@@ -282,13 +319,14 @@ function zeichneZuege() {
   ctx.clearRect(0, 0, zuege.width, zuege.height);
   ctx.globalCompositeOperation = "lighter";
   const { datum, sek } = berlin();
+  const jetztMs = Date.now();
   // Erst Regio, dann Fern, damit ICEs obenauf leuchten
   for (const fern of [false, true]) {
     const sp = sprites[fern ? "fern" : "regio"];
     for (const f of aktiv) {
       if (f.fern !== fern) continue;
       const jetzt = sek + tageZwischen(f.datum, datum) * DAY;
-      const t = f.ist, n = f.seqs.length;
+      const t = zeiten(f, jetztMs), n = f.seqs.length;
       if (jetzt < t[1] || jetzt > t[2 * n - 2]) continue;
       // Abschnitt finden: t[2i+1] = Abfahrt an Halt i, t[2i+2] = Ankunft an Halt i+1
       let i = 0;

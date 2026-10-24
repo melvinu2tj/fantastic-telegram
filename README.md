@@ -28,6 +28,7 @@ Die Adresse lässt sich mit Zusätzen ergänzen, z. B.
 | Zusatz | Wirkung |
 |---|---|
 | `laender=1` | Bundesländergrenzen zeigen |
+| `grenze=2.5` | Landesgrenzen dicker (Standard 1,8) |
 | `versatz=0.15` | Karte um 15 % der Breite nach rechts schieben (negativ = links), z. B. damit Desktop-Icons frei bleiben |
 | `fps=20` | Weniger Bilder pro Sekunde, spart Grafikleistung |
 | `helligkeit=1.5` | Züge heller leuchten lassen |
