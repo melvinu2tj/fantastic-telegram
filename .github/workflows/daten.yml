@@ -48,6 +48,7 @@ jobs:
           mkdir -p site/data
           cp -r web/. site/
           cp netz/network.json netz/borders.json site/data/
+          cp netz/places.json site/data/ 2>/dev/null || true
           cd scripts && python build_trips.py build ../site/data ../netz/de.geojson ../work/fv-out ../work/rv-out
           ls -la ../site/data
       - uses: actions/upload-pages-artifact@v3

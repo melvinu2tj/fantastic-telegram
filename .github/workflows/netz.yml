@@ -66,6 +66,13 @@ jobs:
           curl -sSfL -o osm/admin0.geojson $NE/ne_10m_admin_0_countries.geojson
           curl -sSfL -o osm/admin1.geojson $NE/ne_10m_admin_1_states_provinces.geojson
           cd scripts && python build_borders.py ../osm/admin0.geojson ../osm/admin1.geojson ../out
+      - name: Bundesländer und Städte ab 15.000 Einwohnern
+        run: |
+          Q='[out:json][timeout:300];node["place"~"^(city|town)$"]["population"](45.4,-4.7,56.9,25.6);out;'
+          for u in https://overpass-api.de/api/interpreter https://overpass.kumi.systems/api/interpreter; do
+            curl -sSf --retry 2 -m 400 --data-urlencode "data=$Q" -o osm/orte.json $u && break
+          done
+          cd scripts && python build_places.py ../osm/admin1.geojson ../osm/orte.json ../out/places.json
       - name: Im Release "netz" ablegen
         env:
           GH_TOKEN: ${{ github.token }}

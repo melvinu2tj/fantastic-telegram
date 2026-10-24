@@ -27,11 +27,17 @@ Die Adresse lässt sich mit Zusätzen ergänzen, z. B.
 
 | Zusatz | Wirkung |
 |---|---|
+| `land=brandenburg` | Auf ein Bundesland zoomen, mehrere mit Komma: `land=berlin,brandenburg`. Städte ab 15.000 Einwohnern werden dann dezent beschriftet |
+| `staedte=0` | Städtenamen beim Zoomen ausblenden (`staedte=1` zeigt sie auch in der Gesamtansicht) |
 | `laender=1` | Bundesländergrenzen zeigen |
 | `grenze=2.5` | Landesgrenzen dicker (Standard 1,8) |
 | `versatz=0.15` | Karte um 15 % der Breite nach rechts schieben (negativ = links), z. B. damit Desktop-Icons frei bleiben |
 | `fps=20` | Weniger Bilder pro Sekunde, spart Grafikleistung |
 | `helligkeit=1.5` | Züge heller leuchten lassen |
+
+Namen für `land`: baden-wuerttemberg, bayern, berlin, brandenburg, bremen, hamburg, hessen,
+mecklenburg-vorpommern, niedersachsen, nordrhein-westfalen, rheinland-pfalz, saarland, sachsen,
+sachsen-anhalt, schleswig-holstein, thueringen
 
 ## Wie es funktioniert
 

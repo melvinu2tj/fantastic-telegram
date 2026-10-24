@@ -29,7 +29,7 @@ const SPUREN = [
 // Deutschland im Raster (für Zoom bei Bildschirmen, die nicht 16:9 sind)
 const DE_BOX = { x0: 0, y0: 0, x1: 0, y1: 0 };
 
-let meta = null, netzDaten = null, grenzen = null;
+let meta = null, netzDaten = null, grenzen = null, orte = null, zoomLaender = [];
 let segs = [], hidden = new Set();
 let fahrten = new Map();     // "tripId|YYYYMMDD" -> Fahrt
 let aktiv = [];
@@ -88,6 +88,11 @@ async function ladeGrunddaten() {
   netzDaten = n.lines;
   grenzen = g;
   version = v.built;
+  // Bundesländer und Städte (optional, nur für Zoom und Beschriftung)
+  try { orte = await json(DATA + "places.json"); } catch (e) { orte = null; }
+  if (cfg.land && orte) {
+    zoomLaender = String(cfg.land).toLowerCase().split(/[,+ ]+/).map(x => orte.laender[x]).filter(Boolean);
+  }
   // Deutschland-Ausschnitt aus Längen/Breiten ins Raster
   const proj = (lon, lat) => {
     const y = l => Math.log(Math.tan(Math.PI / 4 + (l * Math.PI / 180) / 2));
@@ -209,13 +214,26 @@ function groesse() {
   const w = innerWidth, h = innerHeight;
   for (const c of [netz, zuege]) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
   if (!meta) return;
-  // Füllend skalieren, aber Deutschland muss ganz sichtbar bleiben
-  const fuell = Math.max(w / meta.w, h / meta.h);
-  const de = Math.min(w / (DE_BOX.x1 - DE_BOX.x0) / 1.08, h / (DE_BOX.y1 - DE_BOX.y0) / 1.08);
-  const s = Math.min(fuell, de) * dpr;
-  const cx = (DE_BOX.x0 + DE_BOX.x1) / 2, cy = (DE_BOX.y0 + DE_BOX.y1) / 2;
+  let s, cx, cy, zoom = 1;
+  if (zoomLaender.length) {
+    // Auf die gewählten Bundesländer zoomen (mit etwas Rand)
+    const b = zoomLaender.reduce((a, l) => [Math.min(a[0], l.box[0]), Math.min(a[1], l.box[1]),
+      Math.max(a[2], l.box[2]), Math.max(a[3], l.box[3])], [Infinity, Infinity, -Infinity, -Infinity]);
+    s = Math.min(w / (b[2] - b[0]), h / (b[3] - b[1])) / 1.12;
+    cx = (b[0] + b[2]) / 2; cy = (b[1] + b[3]) / 2;
+    zoom = s / (h / (DE_BOX.y1 - DE_BOX.y0));
+  } else {
+    // Füllend skalieren, aber Deutschland muss ganz sichtbar bleiben
+    const fuell = Math.max(w / meta.w, h / meta.h);
+    const de = Math.min(w / (DE_BOX.x1 - DE_BOX.x0) / 1.08, h / (DE_BOX.y1 - DE_BOX.y0) / 1.08);
+    s = Math.min(fuell, de);
+    cx = (DE_BOX.x0 + DE_BOX.x1) / 2; cy = (DE_BOX.y0 + DE_BOX.y1) / 2;
+  }
+  s *= dpr;
   view = {
-    s, dpr, k: (h / 1080) * dpr,
+    s, dpr, zoom, basis: (h / 1080) * dpr,
+    // Punkte und Linien wachsen beim Zoomen etwas mit, aber nicht im vollen Maßstab
+    k: (h / 1080) * dpr * (1 + 0.3 * Math.log2(Math.max(1, zoom))),
     ox: w * dpr / 2 + (cfg.versatz || 0) * w * dpr - cx * s,
     oy: h * dpr / 2 - cy * s,
   };
@@ -243,8 +261,38 @@ function zeichneNetz() {
     c.strokeStyle = farbe; c.lineWidth = breite * view.k; c.stroke();
   };
   strich(grenzen.countries, "rgba(170,185,210,0.18)", cfg.grenze || 1.8);
-  if (cfg.laender) strich(grenzen.states, "rgba(170,185,210,0.06)", 0.6);
+  const zoomt = zoomLaender.length > 0;
+  if (cfg.laender || zoomt) strich(grenzen.states, "rgba(170,185,210,0.10)", 0.8);
   for (const i of [2, 1, 0]) strich(netzDaten[i], SPUREN[i].farbe, SPUREN[i].breite);
+  if (zoomt) {
+    // Alles außerhalb der gewählten Bundesländer abdunkeln
+    c.beginPath();
+    c.rect(0, 0, netz.width, netz.height);
+    for (const l of zoomLaender) for (const enc of l.umriss) { linie(c, enc); c.closePath(); }
+    c.fillStyle = "rgba(4,6,10,0.6)";
+    c.fill("evenodd");
+  }
+  if (orte && (cfg.staedte ?? zoomt)) zeichneStaedte(c);
+}
+
+// Städtenamen: größte zuerst, überlappende werden weggelassen
+function zeichneStaedte(c) {
+  const k = view.basis, belegt = [];
+  const W = netz.width, H = netz.height;
+  c.textBaseline = "middle";
+  for (const [x, y, name, ew] of orte.staedte) {
+    const px = x * view.s + view.ox, py = y * view.s + view.oy;
+    if (px < 0 || py < 0 || px > W || py > H) continue;
+    const gross = ew >= 100000;
+    const fs = (gross ? 12.5 : 11) * view.basis;
+    c.font = `${gross ? 500 : 400} ${fs}px system-ui, "Segoe UI", sans-serif`;
+    const bw = c.measureText(name).width, r = [px + 4 * k, py - fs * 0.6, px + 4 * k + bw, py + fs * 0.6];
+    if (belegt.some(b => r[0] < b[2] + 4 && r[2] > b[0] - 4 && r[1] < b[3] + 2 && r[3] > b[1] - 2)) continue;
+    belegt.push(r);
+    c.fillStyle = gross ? "rgba(190,203,225,0.50)" : "rgba(190,203,225,0.32)";
+    c.beginPath(); c.arc(px, py, 1.3 * k, 0, 2 * Math.PI); c.fill();
+    c.fillText(name, r[0], py);
+  }
 }
 
 // Vorberechnete Leuchtpunkte: je Zugart und Verspätungsstufe

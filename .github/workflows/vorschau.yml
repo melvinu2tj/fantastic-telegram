@@ -29,8 +29,9 @@ jobs:
             await p.waitForTimeout(15000);
             console.log('aktive Züge:', await p.evaluate(() => aktiv.length));
             await p.screenshot({ path: 'vorschau.png' });
-            await p.evaluate(() => { view.s *= 3.2; view.ox = view.ox * 3.2 - innerWidth * 2.0; view.oy = view.oy * 3.2 - innerHeight * 1.3; zeichneNetz(); });
-            await p.waitForTimeout(500);
+            await p.goto('https://melvinu2tj.github.io/fantastic-telegram/?land=brandenburg');
+            await p.waitForTimeout(15000);
+            console.log('Städte:', await p.evaluate(() => orte.length));
             await p.screenshot({ path: 'vorschau-zoom.png' });
             await b.close();
           })();
