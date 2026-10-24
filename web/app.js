@@ -18,9 +18,11 @@ const ctx = zuege.getContext("2d");
 const FARBE = {
   fern: [255, 232, 194],      // warmweiß
   regio: [79, 214, 230],      // türkis
+  sbahn: [112, 226, 140],     // grün
   orange: [255, 154, 60],
   rot: [255, 59, 48],
 };
+const SBAHN = /^S\s*\d*[A-Z]?$/;   // Liniennamen wie S1, S 25, S41
 const SPUREN = [
   { farbe: "rgba(150,170,205,0.30)", breite: 0.9 },   // Deutschland, Personenverkehr
   { farbe: "rgba(150,170,205,0.13)", breite: 0.7 },   // Deutschland, nur Güter
@@ -113,7 +115,7 @@ async function ladeTag(datum) {
     const n = legs.length + 1;
     const seqs = Array.isArray(seq) ? seq : Array.from({ length: n }, (_, i) => seq + i);
     fahrten.set(id + "|" + datum, {
-      key: id + "|" + datum, datum, fern: typ === 0, name, legs, seqs,
+      key: id + "|" + datum, datum, art: typ === 0 ? "fern" : SBAHN.test(name.trim()) ? "sbahn" : "regio", name, legs, seqs,
       plan: t, ist: t, verzug: new Int32Array(n), weg: false,
     });
   }
@@ -307,7 +309,7 @@ function zeichneStaedte(c) {
 
 // Vorberechnete Leuchtpunkte: je Zugart und Verspätungsstufe
 const STUFEN = 12;
-let sprites = { fern: [], regio: [] };
+let sprites = { fern: [], regio: [], sbahn: [] };
 function mische(a, b, t) { return a.map((v, i) => Math.round(v + (b[i] - v) * t)); }
 function farbeFuer(basis, stufe) {
   if (stufe === 0) return basis;
@@ -333,7 +335,7 @@ function sprite(rgb, kern, glanz) {
 }
 function baueSprites() {
   const k = view.k;
-  for (const [art, kern, glanz] of [["fern", 2.1, 9], ["regio", 1.25, 5.5]]) {
+  for (const [art, kern, glanz] of [["fern", 2.1, 9], ["regio", 1.25, 5.5], ["sbahn", 1.05, 4.5]]) {
     sprites[art] = Array.from({ length: STUFEN }, (_, i) => sprite(farbeFuer(FARBE[art], i), kern * k, glanz * k));
   }
 }
@@ -378,11 +380,11 @@ function zeichneZuege() {
   ctx.globalCompositeOperation = "lighter";
   const { datum, sek } = berlin();
   const jetztMs = Date.now();
-  // Erst Regio, dann Fern, damit ICEs obenauf leuchten
-  for (const fern of [false, true]) {
-    const sp = sprites[fern ? "fern" : "regio"];
+  // Erst S-Bahn, dann Regio, dann Fern, damit ICEs obenauf leuchten
+  for (const art of ["sbahn", "regio", "fern"]) {
+    const sp = sprites[art];
     for (const f of aktiv) {
-      if (f.fern !== fern) continue;
+      if (f.art !== art) continue;
       const jetzt = sek + tageZwischen(f.datum, datum) * DAY;
       const t = zeiten(f, jetztMs), n = f.seqs.length;
       if (jetzt < t[1] || jetzt > t[2 * n - 2]) continue;
