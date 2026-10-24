@@ -139,7 +139,7 @@ def build(outdir, de_geojson, *feeds):
     ids = set()
     for src in feeds:
         typ = int(open(os.path.join(src, "typ")).read())
-        stop_rows = read(src, "stops.txt")
+        stop_rows = list(read(src, "stops.txt"))
         stops = {s["stop_id"]: (float(s["stop_lon"]), float(s["stop_lat"])) for s in stop_rows}
         stop_names = {s["stop_id"]: s.get("stop_name", "") for s in stop_rows}
         routes = {r["route_id"]: r["route_short_name"].strip() or r.get("route_long_name", "") for r in read(src, "routes.txt")}
