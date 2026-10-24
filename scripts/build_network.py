@@ -1,4 +1,4 @@
-"""Streckennetz aus OSM-Ausschnitten (nur railway=rail) in kompaktes JSON umwandeln.
+"""Streckennetz aus OSM-Ausschnitten (railway=rail plus S-Bahn) in kompaktes JSON umwandeln.
 
 Aufruf: build_network.py out.json de.osm.pbf [ausland1.osm.pbf ...]
 Die erste Datei ist Deutschland. Klassen:
@@ -18,7 +18,7 @@ class Relations(osmium.SimpleHandler):
         self.passenger = set()
 
     def relation(self, r):
-        if r.tags.get("route") in ("train", "railway"):
+        if r.tags.get("route") in ("train", "railway", "light_rail"):
             for m in r.members:
                 if m.type == "w":
                     self.passenger.add(m.ref)
@@ -31,7 +31,9 @@ class Ways(osmium.SimpleHandler):
 
     def way(self, w):
         t = w.tags
-        if t.get("railway") != "rail" or "service" in t or t.get("usage") in SKIP_USAGE or w.id in self.seen:
+        # S-Bahn Berlin/Hamburg: light_rail mit Stromschiene; Stadtbahnen (Oberleitung) bleiben draußen
+        sbahn = t.get("railway") == "light_rail" and t.get("electrified") == "rail"
+        if (t.get("railway") != "rail" and not sbahn) or "service" in t or t.get("usage") in SKIP_USAGE or w.id in self.seen:
             return
         self.seen.add(w.id)
         x0, y0, x1, y1 = geo.BBOX
@@ -51,7 +53,7 @@ def main(out, de, *foreign):
     rel = Relations()
     rel.apply_file(de)
     seen, lines = set(), [[], [], []]
-    h = Ways(lambda w: 0 if w.id in rel.passenger else 1, seen)
+    h = Ways(lambda w: 0 if w.id in rel.passenger or w.tags.get("railway") == "light_rail" else 1, seen)
     h.apply_file(de, locations=True)
     for i in range(3):
         lines[i] += h.lines[i]
