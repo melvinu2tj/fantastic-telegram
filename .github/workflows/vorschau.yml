@@ -15,7 +15,8 @@ jobs:
           curl -sS $B/data/version.json; echo
           for f in segments network borders ids; do printf "%s: " $f; curl -sS -o /dev/null -w "%{size_download} Bytes\n" $B/data/$f.json; done
           curl -sS $B/data/day-$(TZ=Europe/Berlin date +%Y%m%d).json | python3 -c "import json,sys,collections; d=json.load(sys.stdin); print('Fahrten heute:', len(d['trips']), collections.Counter(t[1] for t in d['trips']))"
-          curl -sS https://fantastic-telegram-35tn.vercel.app/api/delays | python3 -c "import json,sys; d=json.load(sys.stdin); print('Vercel:', {k:(len(v) if isinstance(v,(list,dict)) else v) for k,v in d.items()})"
+          curl -sS -o rt.json -w "Vercel HTTP %{http_code}, %{time_total} s\n" https://fantastic-telegram-35tn.vercel.app/api/delays || true
+          python3 -c "import json; d=json.load(open('rt.json')); print('Vercel:', {k:(len(v) if isinstance(v,(list,dict)) else v) for k,v in d.items()})" || head -c 400 rt.json
       - name: Screenshot
         run: |
           npm i -s playwright@1.48.2 && npx playwright install --with-deps chromium >/dev/null
