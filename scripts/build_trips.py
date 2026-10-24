@@ -10,7 +10,7 @@ from collections import defaultdict
 from zoneinfo import ZoneInfo
 import geo
 
-INCLUDE_SBAHN = True # auf True setzen, um S-Bahnen mit anzuzeigen
+INCLUDE_SBAHN = False # auf True setzen, um S-Bahnen mit anzuzeigen
 SBAHN = re.compile(r"^S\s*\d*[A-Z]?$")
 DAYS = range(-1, 3)  # gestern bis übermorgen
 TZ = ZoneInfo("Europe/Berlin")
