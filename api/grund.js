@@ -71,7 +71,7 @@ module.exports = async (req, res) => {
   const ziel = q.get("ziel"), an = q.get("an") || "", name = kurz(q.get("name") || ""), nr = q.get("nr") || "";
   if (!process.env.DB_CLIENT_ID || !ziel || !/^\d{10}$/.test(an)) {
     res.statusCode = 400;
-    return res.end(JSON.stringify({ fehler: "Parameter oder Zugangsdaten fehlen" }));
+    return res.end(JSON.stringify({ fehler: process.env.DB_CLIENT_ID && process.env.DB_API_KEY ? "Parameter fehlen" : "DB_CLIENT_ID oder DB_API_KEY fehlt" }));
   }
   try {
     const nummer = await eva(ziel);
