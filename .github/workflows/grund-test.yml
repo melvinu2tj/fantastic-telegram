@@ -1,0 +1,12 @@
+# Bei Bedarf: kurz prüfen, ob die Verspätungsgründe (DB-Schnittstelle über Vercel) antworten.
+name: grund-test
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          V=https://fantastic-telegram-35tn.vercel.app/api/grund
+          curl -sS -w "\nBahnhof HTTP %{http_code}\n" "$V?bahnhof=Berlin%20Hbf" || true
+          curl -sS -w "\nGrund HTTP %{http_code}\n" "$V?ziel=Berlin%20Hbf&an=$(TZ=Europe/Berlin date +%y%m%d%H)00&name=RE1" || true
