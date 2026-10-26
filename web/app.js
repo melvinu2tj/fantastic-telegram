@@ -484,6 +484,19 @@ function bahnLink(f) {
   return `https://www.bahn.de/buchung/fahrplan/suche#sts=true&so=${e(von)}&zo=${e(nach)}&kl=2&r=13:16:KLASSENLOS:1&hd=${ab.iso}&hza=D&ar=false&s=true&d=false&hz=%5B%5D&fm=false&bp=false`;
 }
 
+// Verspätungsgrund einmal je Zug nachladen (nur wenn eine Adresse dafür eingestellt ist)
+async function holeGrund(f) {
+  if (!cfg.grundUrl || !f.info || f.grundGeholt) return;
+  f.grundGeholt = true;
+  const an = uhrzeit(f.datum, f.plan[f.plan.length - 2]);
+  const q = new URLSearchParams({ ziel: f.info[1], an: an.tag.slice(2) + an.text.replace(":", ""), name: f.name, nr: f.info[2] || "" });
+  try {
+    const r = await json(cfg.grundUrl + "?" + q);
+    f.grund = r.gruende || [];
+    f.angezeigt = null;   // Karte beim nächsten Bild neu füllen
+  } catch (e) { console.warn("Grund:", e); }
+}
+
 function fuelleKarte(f, verzug) {
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const nr = f.info && f.info[2] && !f.name.includes(f.info[2]) ? " " + f.info[2] : "";
@@ -496,6 +509,8 @@ function fuelleKarte(f, verzug) {
     html += `<div>${esc(f.info[0])} ${ab.text} → ${esc(f.info[1])} ${an.text}</div>`;
   }
   html += `<div class="lage">${lage}</div>`;
+  if (f.grund && f.grund.length) html += `<div class="grund">${f.grund.map(esc).join("<br>")}</div>`;
+  else if (min >= 5) holeGrund(f);
   if (f.info) html += `<a href="${bahnLink(f)}" target="_blank" rel="noopener">Auf bahn.de öffnen</a>`;
   karte.innerHTML = html;
 }
