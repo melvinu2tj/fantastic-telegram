@@ -8,4 +8,5 @@ window.ZUGKARTE = {
   grenze: 1.8,       // Strichstärke der Landesgrenzen
   versatz: 0,        // Karte seitlich verschieben (-0.3 … 0.3 Bildschirmbreiten), z. B. für Desktop-Icons
   helligkeit: 1,     // Leuchtstärke der Züge
+  strg: true,        // Züge anklicken und Karte verschieben nur mit gedrückter Strg-Taste
 };

@@ -521,13 +521,18 @@ function waehle(f) {
   if (f) f.angezeigt = null; else karte.hidden = true;
 }
 
+// Anklicken, Verschieben und Zurücksetzen nur mit gedrückter Strg-Taste, damit normale Klicks
+// auf den Desktop nichts verstellen (abschaltbar mit strg=0)
+const mitStrg = e => !cfg.strg || e.ctrlKey || e.metaKey;
+
 let ziehen = null;
 addEventListener("pointerdown", e => {
   if (e.target.closest && e.target.closest("#karte")) return;
+  if (!mitStrg(e)) return;
   ziehen = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy, bewegt: false };
 });
 addEventListener("pointermove", e => {
-  if (!ziehen) { document.body.style.cursor = zugAn(e.clientX, e.clientY) ? "pointer" : ""; return; }
+  if (!ziehen) { document.body.style.cursor = mitStrg(e) && zugAn(e.clientX, e.clientY) ? "pointer" : ""; return; }
   const dx = e.clientX - ziehen.x, dy = e.clientY - ziehen.y;
   if (!ziehen.bewegt && Math.hypot(dx, dy) < 5) return;
   ziehen.bewegt = true;
@@ -544,7 +549,7 @@ addEventListener("wheel", e => {
   e.preventDefault();
   zoomeUm(e.clientX * view.dpr, e.clientY * view.dpr, Math.exp(-e.deltaY * 0.0015));
 }, { passive: false });
-addEventListener("dblclick", e => { if (!zugAn(e.clientX, e.clientY)) { waehle(null); groesse(); } });
+addEventListener("dblclick", e => { if (mitStrg(e) && !zugAn(e.clientX, e.clientY)) { waehle(null); groesse(); } });
 
 // ---------- Ablauf ----------
 

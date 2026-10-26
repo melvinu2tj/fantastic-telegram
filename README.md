@@ -41,12 +41,13 @@ sachsen-anhalt, schleswig-holstein, thueringen
 
 ## Bedienen
 
-- **Zug anklicken**: zeigt Linie, Start und Ziel mit Uhrzeit und die aktuelle Verspätung, dazu einen Link,
+- **Strg + Klick auf einen Zug**: zeigt Linie, Start und Ziel mit Uhrzeit und die aktuelle Verspätung, dazu einen Link,
   der die Verbindung auf bahn.de öffnet. Verspätete Züge werden beim Klicken bevorzugt getroffen.
 - **Mausrad**: hinein- und herauszoomen. Ab etwa 2,5-facher Vergrößerung erscheinen Städtenamen.
-- **Ziehen**: Karte verschieben.
-- **Doppelklick** auf eine leere Stelle: zurück zur Ausgangsansicht.
+- **Strg + Ziehen**: Karte verschieben.
+- **Strg + Doppelklick** auf eine leere Stelle: zurück zur Ausgangsansicht.
 
+Normale Klicks auf den Desktop lösen nichts aus. Mit dem Zusatz `strg=0` geht alles auch ohne Strg-Taste.
 In Lively muss dafür unter Einstellungen → Hintergrund die Mauseingabe eingeschaltet sein (Standard).
 
 ## Wie es funktioniert
