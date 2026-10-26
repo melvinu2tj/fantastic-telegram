@@ -49,8 +49,10 @@ let evaCache = new Map();
 async function eva(name) {
   if (!evaCache.has(name)) {
     const xml = await db("/station/" + encodeURIComponent(name));
-    const st = xml.match(/<station\s[^>]*>/);
-    evaCache.set(name, st ? attr(st[0], "eva") : null);
+    // Mehrere Treffer möglich ("Berlin Hbf" und "Berlin Hbf (tief)"): exakter Name zuerst
+    const alle = xml.match(/<station\s[^>]*>/g) || [];
+    const st = alle.find(t => kurz(attr(t, "name") || "") === kurz(name)) || alle[0];
+    evaCache.set(name, st ? attr(st, "eva") : null);
   }
   return evaCache.get(name);
 }
