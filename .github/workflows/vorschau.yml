@@ -17,6 +17,8 @@ jobs:
           curl -sS $B/data/day-$(TZ=Europe/Berlin date +%Y%m%d).json | python3 -c "import json,sys,collections; d=json.load(sys.stdin); print('Fahrten heute:', len(d['trips']), collections.Counter(t[1] for t in d['trips']))"
           curl -sS -o rt.json -w "Vercel HTTP %{http_code}, %{time_total} s\n" https://fantastic-telegram-35tn.vercel.app/api/delays || true
           python3 -c "import json; d=json.load(open('rt.json')); print('Vercel:', {k:(len(v) if isinstance(v,(list,dict)) else v) for k,v in d.items()})" || head -c 400 rt.json
+          # Verspätungsgründe: Zugangsdaten und Schnittstelle prüfen (Planankunft zur vollen Stunde in Berlin)
+          curl -sS -w "\nGrund HTTP %{http_code}\n" "https://fantastic-telegram-35tn.vercel.app/api/grund?ziel=Berlin%20Hbf&an=$(TZ=Europe/Berlin date +%y%m%d%H)00&name=RE1" || true
       - name: Screenshot
         run: |
           npm i -s playwright@1.48.2 && npx playwright install --with-deps chromium >/dev/null
@@ -36,7 +38,7 @@ jobs:
             await p.screenshot({ path: 'vorschau-zoom.png' });
             // Den am stärksten verspäteten Zug anklicken
             const pt = await p.evaluate(() => { let b = -1; for (let i = 0; i < tN; i++) if (b < 0 || tV[i] > tV[b]) b = i; return b < 0 ? null : [tX[b] / view.dpr, tY[b] / view.dpr]; });
-            if (pt) { await p.keyboard.down('Control'); await p.mouse.click(pt[0], pt[1]); await p.keyboard.up('Control'); await p.waitForTimeout(500); }
+            if (pt) { await p.keyboard.down('Control'); await p.mouse.click(pt[0], pt[1]); await p.keyboard.up('Control'); await p.waitForTimeout(4000); }
             console.log('Karte:', await p.evaluate(() => karte.innerText), await p.evaluate(() => karte.querySelector('a')?.href));
             await p.screenshot({ path: 'vorschau-klick.png' });
             await b.close();
