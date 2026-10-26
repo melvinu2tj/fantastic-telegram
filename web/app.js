@@ -477,11 +477,29 @@ function uhrzeit(datum, sek) {
   return { tag, text: `${z(r / 3600)}:${z(r / 60 % 60)}`, iso: `${tag.slice(0, 4)}-${tag.slice(4, 6)}-${tag.slice(6, 8)}T${z(r / 3600)}:${z(r / 60 % 60)}:00` };
 }
 
+// bahn.de erkennt Bahnhöfe nur an ihrer Nummer (EVA); die holt die Vercel-Funktion einmal je Name
+const evas = new Map();
+async function holeEva(name) {
+  if (!evas.has(name)) {
+    evas.set(name, null);
+    try { evas.set(name, (await json(cfg.grundUrl + "?bahnhof=" + encodeURIComponent(name))).eva || null); } catch (e) { }
+  }
+  return evas.get(name);
+}
+async function holeEvas(f) {
+  if (!cfg.grundUrl || !f.info) return;
+  await Promise.all([holeEva(f.info[0]), holeEva(f.info[1])]);
+  if (auswahl === f) f.angezeigt = null;   // Karte mit vollständigem Link neu füllen
+}
+
 function bahnLink(f) {
   const [von, nach] = f.info;
   const ab = uhrzeit(f.datum, f.plan[1]);
   const e = encodeURIComponent;
-  return `https://www.bahn.de/buchung/fahrplan/suche#sts=true&so=${e(von)}&zo=${e(nach)}&kl=2&r=13:16:KLASSENLOS:1&hd=${ab.iso}&hza=D&ar=false&s=true&d=false&hz=%5B%5D&fm=false&bp=false`;
+  const ort = (name, nr) => nr ? `&${name}id=${e(`A=1@O=${nr.name}@L=${nr.eva}@`)}&${name}ei=${nr.eva}` : "";
+  return `https://www.bahn.de/buchung/fahrplan/suche#sts=true&so=${e(von)}&zo=${e(nach)}` +
+    ort("so", evas.get(von) && { name: von, eva: evas.get(von) }) + ort("zo", evas.get(nach) && { name: nach, eva: evas.get(nach) }) +
+    `&kl=2&r=13:16:KLASSENLOS:1&hd=${ab.iso}&hza=D&ar=false&s=true&d=false&hz=%5B%5D&fm=false&bp=false`;
 }
 
 // Verspätungsgrund einmal je Zug nachladen (nur wenn eine Adresse dafür eingestellt ist)
@@ -533,7 +551,7 @@ function zeigeAuswahl() {
 
 function waehle(f) {
   auswahl = f; auswahlBis = Date.now() + 60e3;
-  if (f) f.angezeigt = null; else karte.hidden = true;
+  if (f) { f.angezeigt = null; holeEvas(f); } else karte.hidden = true;
 }
 
 // Anklicken, Verschieben und Zurücksetzen nur mit gedrückter Strg-Taste, damit normale Klicks

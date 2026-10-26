@@ -3,6 +3,7 @@
 // Planankunft und Linie finden den Zug, die Änderungsmeldungen enthalten die Gründe als Codes.
 // Braucht die Umgebungsvariablen DB_CLIENT_ID und DB_API_KEY (kostenloses Konto).
 //   /api/grund?ziel=Ludwigslust&an=2610262032&name=RE8&nr=4711   ->   { gruende: ["…"] }
+//   /api/grund?bahnhof=Ludwigslust                                ->   { eva: "8010216" }  (für den bahn.de-Link)
 
 const API = "https://apis.deutschebahn.com/db-api-marketplace/apis/timetables/v1";
 
@@ -58,6 +59,15 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Content-Type", "application/json");
   const q = new URL(req.url, "http://x").searchParams;
+  if (q.get("bahnhof") && process.env.DB_CLIENT_ID) {
+    try {
+      res.setHeader("Cache-Control", "public, s-maxage=86400");
+      return res.end(JSON.stringify({ eva: await eva(q.get("bahnhof")) }));
+    } catch (e) {
+      res.statusCode = 502;
+      return res.end(JSON.stringify({ fehler: String(e.message || e) }));
+    }
+  }
   const ziel = q.get("ziel"), an = q.get("an") || "", name = kurz(q.get("name") || ""), nr = q.get("nr") || "";
   if (!process.env.DB_CLIENT_ID || !ziel || !/^\d{10}$/.test(an)) {
     res.statusCode = 400;
