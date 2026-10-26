@@ -4,7 +4,7 @@ window.ZUGKARTE = {
   // Adresse der Echtzeit-Verspätungen (Vercel-Funktion). Leer = nur Fahrplan.
   delaysUrl: "https://fantastic-telegram-35tn.vercel.app/api/delays",
   // Adresse für Verspätungsgründe beim Anklicken (Vercel-Funktion, braucht DB-Zugangsdaten). Leer = aus.
-  grundUrl: "",
+  grundUrl: "https://fantastic-telegram-35tn.vercel.app/api/grund",
   fps: 30,           // Bilder pro Sekunde
   laender: false,    // Bundesländergrenzen zeigen
   grenze: 1.8,       // Strichstärke der Landesgrenzen
